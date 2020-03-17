@@ -1,2 +1,4 @@
-# fastanddirty
-fast and dirty files to test things or get a fast solution
+# Fast and diry scripts
+
+This scripts are just used to get a fast solution for small problems. 
+You might wanna change them, before you deploy anyting.
