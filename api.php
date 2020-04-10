@@ -1,27 +1,85 @@
 <?php
 
-# *** NEWS API < DIRTY SOLUTION > ***
+### CONFIG ###
 
-require_once __DIR__ . '/config.inc.php';
-$apiKey = '$2y$12$a4hUvAdhI/y4Ws4t1HhBZuW1PQ4K1bVqCd8RigfgsMH.rKC.AxNzm';
+# *** insert your token ***
+define('TOKEN', '$2y$15$6RDo5OQXGv1wTdWMoLopGu51SMiWKlR06tTxYCzkEtkk1I9uqSWpK');
+$newsIds = [
+  'server' => 4,
+  'homepage' => 5,
+  'team' => 7
+];
 
-try {
-	$dbh = new PDO('mysql:host='.$dbHost.';dbname='.$dbName, $dbUser, $dbPassword);
-} catch(PDOException $e) {
-	die('<pre>Error: '. $e->getMessage());
-}
+### CONFIG END ###
 
-$valid = $_GET['key'];
+header("Access-Control-Allow-Origin: *");
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Methods: GET");
+header("Access-Control-Max-Age: 3600");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, X-Requested-With");
 
-$valid ??= die();
 
-if ($valid === $apiKey) {
-	$sqlQuery = "SELECT p.* FROM wbb1_post AS p JOIN wbb1_thread AS t ON p.threadID = t.threadID WHERE t.boardID = 4";	
-	$stmt = $dbh->prepare($sqlQuery);	
-	$stmt->execute();	
-	$res = $stmt->fetchAll(PDO::FETCH_ASSOC);
-	header('Content-Type: application/json');
-	echo json_encode($res);
+# *** simple authenticaion via token ***
+if ($_GET['_token'] == TOKEN) {
+  require_once __DIR__ . '/config.inc.php';
+  
+  try {
+    $dbh = new \PDO('mysql:host='. $dbHost .';dbname='. $dbName, $dbUser, $dbPassword);
+    $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+  } catch(PDOException $e) {
+    throw new dbException($e);
+    exit();
+  }
+  
+  # *** return all news GET /news ***
+  if ($_GET['_news'] == '') {
+    $query = "
+      SELECT p.username, topic, p.time, p.message, t.boardID 
+      FROM wbb1_post AS p 
+      INNER JOIN wbb1_thread AS t 
+      ON t.threadID = p.threadID 
+      WHERE t.boardID = ".$newsIds['server']." 
+      OR t.boardID = ".$newsIds['homepage']." 
+      OR t.boardID = ".$newsIds['team']."
+      ORDER BY p.time DESC
+      LIMIT 10"
+    ;
+
+    $stmt = $dbh->prepare($query);
+    $stmt->execute();
+    $res = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    echo json_encode($res, JSON_FORCE_OBJECT);
+
+  # *** return news by boardID GET /news/{id}
+  } elseif ($_GET['_news'] != '' && in_array($_GET['_news'], $newsIds)) {
+    $query = "
+      SELECT p.username, topic, p.time, p.message, t.boardID
+      FROM wbb1_post AS p
+      INNER JOIN wbb1_thread AS t
+      ON t.threadID = p.threadID 
+      WHERE t.boardID = ?
+      ORDER BY p.time DESC
+      LIMIT 10;
+    ";
+    $stmt = $dbh->prepare($query);
+    $stmt->bindParam(1, $_GET['_news']);
+    $stmt->execute();
+    $res = $stmt->fetchAll(PDO::FETCH_ASSOC); 
+    echo json_encode($res, JSON_FORCE_OBJECT);
+    
+  # *** return not found ***
+  } else {
+    header("HTTP/1.1 404 Not Found");
+  }
+
+  # *** not found ***
+  $_GET['_news'] ??= header("HTTP/1.1 404 Not Found");
+  exit();
 } else {
-	die('Come on die.');
+  header("HTTP/1.1 401 Authorization Required");
+  $json = [
+    'message' => 'Unauthorized',
+  ];
+  echo json_encode($json);
+  exit();
 }
